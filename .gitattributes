@@ -1,0 +1,2 @@
+# Use Rust syntax highlighter for Move code
+*.move linguist-language=Rust
