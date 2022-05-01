@@ -3,6 +3,7 @@ module MPK::MPK20 {
     use Std::Errors;
     use Std::Signer;
     use AptosFramework::Table::{Self, Table};
+    use Std::Option::{Self, Option};
 
     /// Error codes
     const EINSUFFICIENT_BALANCE: u64 = 0;
@@ -26,13 +27,6 @@ module MPK::MPK20 {
         allowances: Table<address, u64>,
     }
 
-    /// One who can add and remove minters.
-    /// There may only be one of these per Coin.
-    struct Progenitor has key, store, drop {
-        /// The address of the mint (coin).
-        mint: address
-    }
-
     /// Holds the metadata of a Coin.
     struct Mint has key {
         /// The total unscaled supply of the Coin.
@@ -42,6 +36,9 @@ module MPK::MPK20 {
         /// Used for rebasing supply.
         /// Scaling factor is multiplied by 10^12.
         scaling_factor: u64,
+        /// One who can add and remove minters.
+        /// There may only be one of these per Coin.
+        progenitor: Option<address>
     }
 
     // --------------------------------
@@ -51,27 +48,19 @@ module MPK::MPK20 {
     /// Creates a new Mint.
     public fun initialize_mint(
         account: &signer,
-        // Number of decimals that the Coin has.
-        decimals: u8
+        decimals: u8,
+        progenitor: address
     ) {
         let mint_address = Signer::address_of(account);
         assert!(
             !exists<Mint>(mint_address),
             Errors::already_published(EALREADY_HAS_BALANCE)
         );
-        assert!(
-            !exists<Progenitor>(mint_address),
-            Errors::already_published(EALREADY_HAS_BALANCE)
-        );
         move_to(account, Mint {
             total_supply_unscaled: 0,
             decimals,
             scaling_factor: SCALING_FACTOR_PRECISION,
-        });
-
-        // The initial progenitor is the Mint itself.
-        move_to(account, Progenitor {
-            mint: mint_address
+            progenitor: Option::some(progenitor),
         });
     }
 
@@ -81,12 +70,8 @@ module MPK::MPK20 {
         mint: address,
         minter: address,
         allowance: u64
-    ) acquires Progenitor, Minter {
-        let progenitor_info = borrow_global<Progenitor>(Signer::address_of(progenitor));
-        assert!(
-            progenitor_info.mint == mint,
-            Errors::requires_capability(EDELEGATION_NOT_FOUND)
-        );
+    ) acquires Mint, Minter {
+        Self::check_is_progenitor(progenitor, mint);
 
         assert!(exists<Minter>(minter), Errors::already_published(EALREADY_HAS_BALANCE));
         let allowances = &mut borrow_global_mut<Minter>(minter).allowances;
@@ -99,9 +84,16 @@ module MPK::MPK20 {
         }
     }
 
-    /// Drops the Progenitor privilege, preventing mint allowances from being modified.
-    public fun drop_progenitor(progenitor: &signer) acquires Progenitor {
-        move_from<Progenitor>(Signer::address_of(progenitor));
+    /// Transfers the Progenitor privilege to a different address.
+    public fun set_progenitor(
+        progenitor: &signer,
+        mint: address,
+        next_progenitor: Option<address>
+    ) acquires Mint {
+        Self::check_is_progenitor(progenitor, mint);
+
+        let progenitor_ref = &mut borrow_global_mut<Mint>(mint).progenitor;
+        *progenitor_ref = next_progenitor;
     }
 
     // --------------------------------
@@ -210,6 +202,24 @@ module MPK::MPK20 {
     /// Get the current scaling factor of the coin.
     public fun scaling_factor(mint: address): u64 acquires Mint {
         borrow_global<Mint>(mint).scaling_factor
+    }
+
+    /// Get the current progenitor.
+    public fun progenitor(mint: address): Option<address> acquires Mint {
+        borrow_global<Mint>(mint).progenitor
+    }
+
+    /// Get the current progenitor.
+    fun check_is_progenitor(progenitor: &signer, mint: address) acquires Mint {
+        let maybe_progenitor = Self::progenitor(mint);
+        assert!(
+            Option::is_some(&maybe_progenitor),
+            Errors::requires_capability(EDELEGATION_NOT_FOUND)
+        );
+        assert!(
+            *Option::borrow(&maybe_progenitor) == Signer::address_of(progenitor),
+            Errors::requires_capability(EDELEGATION_NOT_FOUND)
+        );
     }
 
     // --------------------------------

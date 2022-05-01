@@ -5,8 +5,8 @@ module MPK::MPK20Tests {
 
     #[test(mint = @0x1, owner = @0x2)]
     fun successful_initialize_mint(mint: signer, owner: signer) {
-        MPK20::initialize_mint(&mint, 6);
-        MPK20::initialize_balances(&owner);
+        MPK20::initialize_mint(&mint, 6, Signer::address_of(&owner));
+        MPK20::initialize_balances(&owner );
     }
 
     #[test(mint = @0x1, minter = @0x2, from = @0x3, to = @0x4)]
@@ -16,18 +16,17 @@ module MPK::MPK20Tests {
         from: signer,
         to: signer
     ) {
-
         let mint_addr = Signer::address_of(&mint);
         let from_addr = Signer::address_of(&from);
         let to_addr = Signer::address_of(&to);
 
-        MPK20::initialize_mint(&mint, 6);
+        MPK20::initialize_mint(&mint, 6, Signer::address_of(&minter));
         MPK20::initialize_minter(&minter);
         MPK20::initialize_balances(&from);
         MPK20::initialize_balances(&to);
 
         MPK20::set_mint_allowance(
-            &mint,
+            &minter,
             Signer::address_of(&mint),
             Signer::address_of(&minter),
             100

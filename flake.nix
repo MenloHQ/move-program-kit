@@ -1,7 +1,6 @@
 {
   description = "MPK programming environment.";
 
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     saber-overlay.url = "github:saber-hq/saber-overlay";
